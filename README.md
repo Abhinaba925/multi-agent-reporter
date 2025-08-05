@@ -29,12 +29,4 @@ The workflow is as follows:
 
 ---
 
-## 🚀 Getting Started
 
-Follow these steps to run the project on your local machine.
-
-### 1. Clone the Repository
-
-```bash
-git clone [https://github.com/YOUR_USERNAME/multi-agent-reporter.git](https://github.com/YOUR_USERNAME/multi-agent-reporter.git)
-cd multi-agent-reporter
