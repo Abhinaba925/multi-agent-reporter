@@ -1,6 +1,6 @@
-# 🤖 Auto-Report Team: A Multi-Agent System
+# Auto-Report Team: A Multi-Agent System
 
-This project demonstrates a sophisticated multi-agent system built with LangGraph and Google's Gemini model. A team of AI agents collaborates to research, write, revise, and score a detailed report on a given topic, showcasing a powerful "self-correction" loop.
+This project demonstrates a sophisticated multi-agent system built with LangGraph. A team of AI agents collaborates to research, write, revise, and score a detailed report on a given topic, showcasing a powerful "self-correction" loop.
 
 
 
@@ -24,7 +24,6 @@ The workflow is as follows:
 ## 🛠️ Tech Stack
 
 * **Orchestration:** LangGraph
-* **AI Models:** Google Gemini (`gemini-1.5-flash`)
 * **Core Library:** LangChain
 
 ---
