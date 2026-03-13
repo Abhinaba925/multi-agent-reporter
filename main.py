@@ -13,10 +13,21 @@ st.set_page_config(page_title="Multi-Agent Reporter", layout="wide")
 st.title("⚡ Agentic Workflows: Single Prompt vs. LangGraph Team")
 st.markdown("Experience the difference in depth and reasoning when a standard LLM response is replaced by a multi-step, specialized agent architecture.")
 
-# --- API KEY HANDLING ---
+# --- SIDEBAR: API KEY & SETTINGS ---
+st.sidebar.markdown("### Configuration")
 api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 if not api_key and "GROQ_API_KEY" in os.environ:
     api_key = os.environ["GROQ_API_KEY"]
+
+# Add Temperature Slider
+user_temperature = st.sidebar.slider(
+    "Model Temperature",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.2,
+    step=0.1,
+    help="Higher values (e.g., 0.8) make the output more creative/random. Lower values (e.g., 0.1) make it more focused and deterministic."
+)
 
 if not api_key:
     st.warning("Please enter your Groq API Key in the sidebar to continue. Get one for free at console.groq.com")
@@ -25,9 +36,8 @@ if not api_key:
 # Initialize Groq Model
 os.environ["GROQ_API_KEY"] = api_key
 try:
-    # Using Llama 3 8B - it is incredibly fast and perfect for multi-agent loops
-    # To this:
-    model = ChatGroq(model="llama-3.1-8b-instant", temperature=0.7)
+    # Using Llama 3.1 8B Instant and passing the dynamic user_temperature
+    model = ChatGroq(model="llama-3.1-8b-instant", temperature=user_temperature)
     parser = StrOutputParser()
 except Exception as e:
     st.error(f"Error initializing the model: {e}")
@@ -44,26 +54,39 @@ class AgentState(TypedDict):
 
 # --- 2. DEFINE THE CORE AGENTS ---
 def planner_agent(state: AgentState):
-    prompt = PromptTemplate.from_template("You are an expert planner. Create a detailed plan for this task: {task}")
+    prompt = PromptTemplate.from_template(
+        "You are an expert technical planner. Create a detailed outline for a comprehensive technical article on this task: {task}. "
+        "IMPORTANT: Your outline must use concise, professional section titles (e.g., 'Neural Network Architecture' instead of 'Description of the Neural Network...'). "
+        "Do not use bureaucratic formats like 'Executive Summary'. Focus purely on educational value and logical flow."
+    )
     runnable = prompt | model | parser
     plan = runnable.invoke({"task": state['task']})
     return {"plan": plan}
 
 def researcher_agent(state: AgentState):
-    prompt = PromptTemplate.from_template("You are an expert researcher. Gather information based on this plan: {plan}")
+    prompt = PromptTemplate.from_template("You are an expert researcher. Gather dense, factual information and mathematical formulas based on this outline: {plan}")
     runnable = prompt | model | parser
     research = runnable.invoke({"plan": state['plan']})
     return {"research": research}
 
 def writer_agent(state: AgentState):
-    prompt = PromptTemplate.from_template("You are an expert writer. Write a draft report using this research: {research}")
+    prompt = PromptTemplate.from_template(
+        "You are an expert technical writer. Write a comprehensive, seamless technical article using this research: {research}. "
+        "FORMATTING RULES: "
+        "1. Use proper Markdown formatting (e.g., `###` for subheadings, `**bold**` for key terms). "
+        "2. You MUST use LaTeX formatting (e.g., `$$ equation $$` or `$ equation $`) for ALL mathematical formulas and variables. "
+        "3. Ensure smooth narrative transitions between sections. Do not just list the outline points. "
+        "4. Write objectively. NEVER refer to 'this project', 'our team', or 'this report'."
+    )
     runnable = prompt | model | parser
     draft = runnable.invoke({"research": state['research']})
     return {"draft": draft}
 
 def revision_agent(state: AgentState):
     prompt = PromptTemplate.from_template(
-        "You are an expert editor. Revise this draft: {draft} based on these critiques: {critique}"
+        "You are an expert technical editor. Revise this draft: {draft} based strictly on these critiques: {critique}. "
+        "Ensure the final text is beautifully formatted using Markdown, uses LaTeX for all math, is dense with facts, and flows logically. "
+        "Make sure the article is fully complete and does not cut off abruptly at the end."
     )
     runnable = prompt | model | parser
     revised_draft = runnable.invoke({"draft": state['draft'], "critique": state['critique']})
@@ -71,7 +94,9 @@ def revision_agent(state: AgentState):
 
 def critic_agent(state: AgentState):
     prompt = PromptTemplate.from_template(
-        """You are an expert critic. Review the draft report. If it's good, say 'APPROVED'. 
+        """You are an expert critic. Review the draft article. 
+        Penalize any corporate jargon, long/awkward headings, or missing Markdown/LaTeX formatting.
+        If the draft is beautifully formatted, mathematically sound, and well-written, say 'APPROVED'. 
         Otherwise, provide a numbered list of specific, actionable revisions.
         Draft: {draft}"""
     )
@@ -106,21 +131,21 @@ app = workflow.compile()
 
 # --- 4. SCORING AND SINGLE AGENT ---
 def run_single_agent(task_string: str):
-    prompt = PromptTemplate.from_template("You are an expert. Write a detailed report on this task: {task}")
+    prompt = PromptTemplate.from_template("You are an expert. Write a comprehensive technical explanation of this topic: {task}")
     runnable = prompt | model | parser
     return runnable.invoke({"task": task_string})
 
 def scoring_agent(single_agent_report: str, multi_agent_report: str, task: str):
     prompt = PromptTemplate.from_template(
-        """You are an impartial judge. Your task is to score two reports based on a set of criteria.
+        """You are an impartial judge. Your task is to score two texts based on a set of criteria.
         The original task was: "{task}"
         
-        **Scoring Criteria:**
-        1.  **Clarity and Structure (out of 3)**
-        2.  **Depth and Detail (out of 4)**
-        3.  **Completeness (out of 3)**
+        **Scoring Criteria (Total 10 Points):**
+        1. **Factual Density (out of 4):** Does it explain the core mechanics and facts, or does it use filler words/corporate fluff? Deduct points for meta-commentary (e.g., "This report explores...").
+        2. **Clarity and Structure (out of 3):** Is the text logically organized and easy to follow?
+        3. **Completeness (out of 3):** Does it fully address the original task without missing key context?
         
-        You must evaluate two reports:
+        You must evaluate two texts:
         
         **Report 1 (Single-Agent):**
         {single_report}
@@ -128,7 +153,7 @@ def scoring_agent(single_agent_report: str, multi_agent_report: str, task: str):
         **Report 2 (Multi-Agent):**
         {multi_report}
         
-        Please provide a score for each report out of 10. Your response MUST be a valid JSON object with two keys: "single_agent_score" and "multi_agent_score". Do not include markdown formatting like ```json in the output.
+        Please provide a score for each text out of 10. Your response MUST be a valid JSON object with two keys: "single_agent_score" and "multi_agent_score". Do not include markdown formatting like ```json in the output.
         
         {{
           "single_agent_score": 6.5,
