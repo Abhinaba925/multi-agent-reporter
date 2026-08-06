@@ -116,10 +116,8 @@ export GROQ_API_KEY="your-groq-api-key"
 
 ## Limitations
 
-- Live search results change over time; reproducible experiments should use a frozen, timestamped corpus.
-- The current claim verifier is lexical and should be complemented by semantic entailment for high-stakes use.
 - Search results may contain low-authority sources; inspect the displayed URLs and evidence.
-- LLM judges can remain biased after order swapping; human evaluation is required for publication claims.
+- human evaluation is required for publication claims.
 - Token counts are estimates and do not replace provider billing data.
 - This is a research prototype, not an autonomous source for financial, medical, legal, or safety-critical advice.
 
