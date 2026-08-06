@@ -3,3 +3,5 @@ langchain
 langchain-core
 langchain-groq
 langgraph
+requests
+beautifulsoup4
