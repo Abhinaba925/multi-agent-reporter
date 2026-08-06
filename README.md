@@ -82,9 +82,7 @@ The UI reports judge scores, position consistency, citation completeness, claim-
 │   ├── evaluation.py
 │   ├── workflow.py
 │   └── workflow_fixed.py
-├── requirements.txt
-├── requirements_extra.txt
-└── UPGRADE_README.md
+└── requirements.txt
 ```
 
 `main.py` is the primary application entry point. The supporting package separates retrieval, verification, evaluation, and workflow logic from the interface.
@@ -100,12 +98,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run main.py
-```
-
-For an environment that already installed the original dependencies:
-
-```bash
-pip install -r requirements_extra.txt
 ```
 
 Configure the API key either in the sidebar or with:
