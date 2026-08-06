@@ -48,18 +48,22 @@ model_options = {
     "Qwen 3.6 27B": "qwen/qwen3.6-27b",
 }
 selected_model_name = st.sidebar.selectbox(
-    "Language model",
+    "Default language model",
     options=list(model_options.keys()),
     index=0,
-    help="Choose the Groq-hosted model used by the single-agent and multi-agent workflows.",
+    help="Sets the initial selection for every node. You can override each node in Node model selection.",
 )
 selected_model = model_options[selected_model_name]
-judge_model_name = st.sidebar.selectbox(
-    "Judge model",
-    options=list(model_options.keys()),
-    index=0,
-    help="Use a separate model for evaluation when possible to reduce self-preference bias.",
-)
+default_model_index = list(model_options.keys()).index(selected_model_name)
+with st.sidebar.expander("Node model selection", expanded=False):
+    st.caption("Choose the model independently for each workflow component.")
+    planner_model_name = st.selectbox("Planner model", list(model_options.keys()), index=default_model_index)
+    researcher_model_name = st.selectbox("Researcher model", list(model_options.keys()), index=default_model_index)
+    writer_model_name = st.selectbox("Writer model", list(model_options.keys()), index=default_model_index)
+    critic_model_name = st.selectbox("Critic model", list(model_options.keys()), index=default_model_index)
+    reviser_model_name = st.selectbox("Reviser model", list(model_options.keys()), index=default_model_index)
+    baseline_model_name = st.selectbox("Single-agent model", list(model_options.keys()), index=default_model_index)
+    judge_model_name = st.selectbox("Judge model", list(model_options.keys()), index=default_model_index)
 judge_rounds = st.sidebar.slider(
     "Judge repetitions",
     min_value=2,
@@ -76,6 +80,14 @@ if not api_key:
 os.environ["GROQ_API_KEY"] = api_key
 try:
     model = ChatGroq(model=selected_model, temperature=user_temperature)
+    node_models = {
+        "planner": ChatGroq(model=model_options[planner_model_name], temperature=user_temperature),
+        "researcher": ChatGroq(model=model_options[researcher_model_name], temperature=user_temperature),
+        "writer": ChatGroq(model=model_options[writer_model_name], temperature=user_temperature),
+        "critic": ChatGroq(model=model_options[critic_model_name], temperature=0.0),
+        "reviser": ChatGroq(model=model_options[reviser_model_name], temperature=user_temperature),
+        "baseline": ChatGroq(model=model_options[baseline_model_name], temperature=user_temperature),
+    }
     judge_model = ChatGroq(model=model_options[judge_model_name], temperature=0.0)
     parser = StrOutputParser()
 except Exception as e:
@@ -101,7 +113,7 @@ def planner_agent(state: AgentState):
         "Use the supplied evidence to identify which claims need citations.\n"
         "Evidence:\n{evidence}"
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["planner"] | parser
     plan = runnable.invoke({"task": state['task'], "evidence": format_sources(state.get('sources', []))})
     return {"plan": plan}
 
@@ -111,7 +123,7 @@ def researcher_agent(state: AgentState):
         "Cite every externally verifiable claim using the source IDs exactly as [S1] or [P1]. Never invent citations. "
         "If the evidence is insufficient, explicitly say so.\nOutline: {plan}\nEvidence: {evidence}"
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["researcher"] | parser
     research = runnable.invoke({"plan": state['plan'], "evidence": format_sources(state.get('sources', []))})
     return {"research": research}
 
@@ -126,7 +138,7 @@ def writer_agent(state: AgentState):
         "5. Preserve source citations such as [S1] and [P1] for factual claims. Do not create citations not present in the research. "
         "6. End with a `## References` section mapping every cited source ID to its source title and URL."
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["writer"] | parser
     draft = runnable.invoke({"research": state['research']})
     return {"draft": draft}
 
@@ -136,7 +148,7 @@ def revision_agent(state: AgentState):
         "Ensure the final text is beautifully formatted using Markdown, uses LaTeX for all math, is dense with facts, and flows logically. "
         "Make sure the article is fully complete and does not cut off abruptly at the end."
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["reviser"] | parser
     revised_draft = runnable.invoke({"draft": state['draft'], "critique": state['critique']})
     return {"draft": revised_draft}
 
@@ -148,7 +160,7 @@ def critic_agent(state: AgentState):
         Otherwise, provide a numbered list of specific, actionable revisions.
         Draft: {draft}"""
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["critic"] | parser
     critique = runnable.invoke({"draft": state['draft']})
     revision_number = state.get('revision_number', 0) + 1
     return {"critique": critique, "revision_number": revision_number}
@@ -185,7 +197,7 @@ def run_single_agent(task_string: str, sources: List[RetrievedSource]):
         "End with a `## References` section mapping each cited source ID to its title and URL.\n"
         "Task: {task}\nEvidence: {evidence}"
     )
-    runnable = prompt | model | parser
+    runnable = prompt | node_models["baseline"] | parser
     return runnable.invoke({"task": task_string, "evidence": format_sources(sources)})
 
 
@@ -236,7 +248,7 @@ def scoring_agent(single_agent_report: str, multi_agent_report: str, task: str):
         }}
         """
     )
-    scorer_runnable = prompt | model | parser
+    scorer_runnable = prompt | judge_model | parser
     response = scorer_runnable.invoke({
         "single_report": single_agent_report,
         "multi_report": multi_agent_report,
