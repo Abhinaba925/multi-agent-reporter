@@ -1,190 +1,136 @@
 # Multi-Agent Reporter
 
-Multi-Agent Reporter is a Streamlit application that demonstrates how a coordinated LangGraph workflow can produce a more structured technical report than a single prompt-response interaction. The application compares two report generation paths:
+Multi-Agent Reporter is a Streamlit application for comparing direct LLM generation with a coordinated, evidence-grounded LangGraph workflow. It can search the public web or arXiv, generate reports from shared evidence, verify citations, and evaluate candidates using a repeated order-swapped judging protocol.
 
-- A single-agent baseline that writes a report directly from the user topic.
-- A multi-agent workflow that plans, expands, drafts, critiques, revises, and scores the final report.
+## Capabilities
 
-The project is designed as a clear demonstration of agentic workflow orchestration using LangGraph, LangChain, and Groq-hosted language models.
+- Selectable Groq-hosted models, including Llama, GPT-OSS, and Qwen options.
+- Configurable temperature, output-token budget, source count, and revision cycles.
+- Three research modes: no external search, general web search, and arXiv paper search.
+- Web-page extraction when retrieved pages permit access.
+- Shared evidence context for fair single-agent and multi-agent comparison.
+- Inline source identifiers such as `[S1]` and `[P1]`.
+- Human-readable `References` sections in both reports.
+- LangGraph planner, researcher, writer, critic, and reviser workflow.
+- Claim-level checks for missing, invalid, partial, and supported citations.
+- Deterministic citation metrics alongside model-based judging.
+- Anonymous repeated evaluation with both candidate orders.
+- Judge stability and quality-per-1,000-token reporting.
 
-## Features
-
-- Interactive Streamlit interface for entering a report topic.
-- Groq API key support through the sidebar or the `GROQ_API_KEY` environment variable.
-- Adjustable model temperature for controlling response creativity.
-- Single-agent baseline generation for comparison.
-- Multi-step LangGraph workflow with specialized agent roles.
-- Revision loop driven by critic feedback.
-- Automated scoring of the single-agent and multi-agent outputs.
-- Side-by-side report comparison in the browser.
-
-## Application Architecture
-
-The application is organized around a Streamlit UI layer, a LangGraph orchestration layer, and a shared language model interface.
+## Architecture
 
 ```mermaid
 flowchart TD
-    User[User enters report topic] --> UI[Streamlit UI]
-    UI --> Config[API key and model settings]
-    Config --> Model[Groq chat model via LangChain]
-
-    UI --> Single[Single-agent baseline]
-    Single --> SingleReport[Single-agent report]
-
-    UI --> Graph[LangGraph workflow]
-    Graph --> Planner[Planner agent]
-    Planner --> Researcher[Researcher agent]
-    Researcher --> Writer[Writer agent]
-    Writer --> Critic[Critic agent]
-    Critic -->|Needs revision| Reviser[Reviser agent]
+    User[Research topic] --> UI[Streamlit interface]
+    UI --> Retrieval{Research mode}
+    Retrieval -->|Web| Web[DuckDuckGo search]
+    Retrieval -->|Papers| Arxiv[arXiv Atom API]
+    Retrieval -->|None| Empty[No external evidence]
+    Web --> Evidence[Shared evidence]
+    Arxiv --> Evidence
+    Empty --> Evidence
+    Evidence --> Single[Single-agent baseline]
+    Evidence --> Planner[Planner]
+    Planner --> Researcher[Researcher]
+    Researcher --> Writer[Writer]
+    Writer --> Critic[Critic]
+    Critic -->|Revision| Reviser[Reviser]
     Reviser --> Critic
-    Critic -->|Approved or max cycles reached| MultiReport[Multi-agent report]
-
-    SingleReport --> Scorer[Scoring agent]
-    MultiReport --> Scorer
-    Scorer --> Results[Side-by-side reports and scores]
+    Critic -->|Complete| Multi[Multi-agent report]
+    Single --> Verify[Claim verification]
+    Multi --> Verify
+    Single --> Judge[Anonymous repeated judge]
+    Multi --> Judge
+    Verify --> Results[Metrics and results]
+    Judge --> Results
 ```
 
-## Agent Responsibilities
+## Workflow
 
-| Component | Responsibility |
-| --- | --- |
-| Planner | Creates a structured outline for the requested technical topic. |
-| Researcher | Expands the outline into dense supporting notes and formulas. |
-| Writer | Converts the research notes into a polished Markdown report. |
-| Critic | Reviews the draft for structure, clarity, formatting, and completeness. |
-| Reviser | Applies the critic feedback and produces an improved draft. |
-| Scorer | Compares the single-agent and multi-agent reports using a fixed scoring rubric. |
+1. The user enters a technical topic and configures the model and research mode.
+2. The application retrieves external evidence when web or arXiv mode is selected.
+3. The same evidence is supplied to the single-agent baseline and multi-agent workflow.
+4. The planner creates an outline and identifies claims requiring support.
+5. The researcher synthesizes factual notes and formulas with source IDs.
+6. The writer produces Markdown with inline citations and a references section.
+7. The critic checks clarity, completeness, formatting, mathematical quality, and evidence use.
+8. The reviser updates the report until approval or the revision limit.
+9. The verifier computes citation and support metrics.
+10. The anonymous judge evaluates both candidates repeatedly with swapped ordering.
 
-## Execution Flow
+## Evaluation rubric
 
-1. The user enters a topic in the Streamlit interface.
-2. The app initializes a Groq chat model with the selected temperature.
-3. The single-agent baseline generates a direct report from the topic.
-4. The LangGraph workflow starts with a planner agent that creates a report outline.
-5. The researcher agent expands the plan into factual notes and mathematical details.
-6. The writer agent creates the initial multi-agent report draft.
-7. The critic agent evaluates the draft and either approves it or requests revisions.
-8. The reviser agent updates the draft when revisions are required.
-9. The critic and reviser loop continues until approval or the maximum revision count is reached.
-10. The scoring agent evaluates both outputs and returns numerical scores.
-11. Streamlit displays both reports and their scores side by side.
+| Criterion | Weight |
+| --- | ---: |
+| Factuality | 3 |
+| Citation correctness | 2 |
+| Citation completeness | 2 |
+| Task coverage | 1 |
+| Clarity | 1 |
+| Mathematical correctness | 1 |
 
-## Tech Stack
+The UI reports judge scores, position consistency, citation completeness, claim-support precision, unsupported-claim rate, estimated tokens, and quality per 1,000 tokens. Deterministic evidence metrics should be treated as primary signals; LLM scores require human calibration for publication-grade claims.
 
-| Layer | Technology |
-| --- | --- |
-| User interface | Streamlit |
-| Workflow orchestration | LangGraph |
-| Prompt and model integration | LangChain |
-| Language model provider | Groq |
-| Runtime | Python |
-
-## Project Structure
+## Project structure
 
 ```text
 .
-|-- main.py
-|-- README.md
-`-- requirements.txt
+├── main.py
+├── multi_agent_reporter/
+│   ├── retrieval.py
+│   ├── verification.py
+│   ├── evaluation.py
+│   ├── workflow.py
+│   └── workflow_fixed.py
+├── requirements.txt
+├── requirements_extra.txt
+└── UPGRADE_README.md
 ```
 
-### `main.py`
+`main.py` is the primary application entry point. The supporting package separates retrieval, verification, evaluation, and workflow logic from the interface.
 
-Contains the complete application:
+## Installation
 
-- Streamlit page configuration and UI.
-- Groq API key handling.
-- LangChain prompt chains.
-- LangGraph state definition and workflow construction.
-- Agent functions for planning, research, writing, critique, revision, and scoring.
-- Final report display and scoring UI.
-
-### `requirements.txt`
-
-Lists the Python dependencies required to run the application.
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10 or newer is recommended.
-- A Groq API key from `https://console.groq.com`.
-
-### Installation
-
-Clone the repository:
+Requirements: Python 3.10+, a Groq API key, and network access for web or arXiv search.
 
 ```bash
 git clone https://github.com/Abhinaba925/multi-agent-reporter.git
 cd multi-agent-reporter
-```
-
-Create and activate a virtual environment:
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run main.py
 ```
 
-Install dependencies:
+For an environment that already installed the original dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_extra.txt
 ```
 
-### Configuration
-
-You can provide the Groq API key in either of two ways.
-
-Option 1: Enter the key in the Streamlit sidebar when the app starts.
-
-Option 2: Set the `GROQ_API_KEY` environment variable before launching the app:
+Configure the API key either in the sidebar or with:
 
 ```bash
 export GROQ_API_KEY="your-groq-api-key"
 ```
 
-For Windows PowerShell:
+## Example topics
 
-```powershell
-$env:GROQ_API_KEY="your-groq-api-key"
-```
+- Derive the Black–Scholes partial differential equation and explain its assumptions.
+- Compare retrieval-augmented generation with fine-tuning for factuality.
+- Explain transformer attention mechanisms and computational complexity.
+- Compare supervised, self-supervised, and reinforcement learning.
+- Review recent approaches to multi-agent LLM coordination.
 
-### Run the App
+## Limitations
 
-```bash
-streamlit run main.py
-```
-
-Then open the local Streamlit URL shown in the terminal.
-
-## Example Topics
-
-You can try topics such as:
-
-- Explain transformer attention mechanisms.
-- Compare supervised and self-supervised learning.
-- Explain quantum entanglement for a technical audience.
-- Describe gradient descent and its common variants.
-- Explain how retrieval augmented generation works.
-
-## Current Limitations
-
-- The researcher agent does not currently use live web search or external retrieval. It expands the plan using the language model's existing knowledge.
-- The scoring agent receives the labels "single-agent" and "multi-agent", so the evaluation is not fully blind.
-- Dependency versions are not pinned, which can lead to compatibility changes over time.
-- The entire application currently lives in a single Python file, which is convenient for a demo but less ideal as the project grows.
-
-## Suggested Future Improvements
-
-- Add external research tools or retrieval augmented generation.
-- Store and display the full critique and revision history.
-- Split the application into separate modules for UI, agents, graph construction, and scoring.
-- Add structured JSON parsing for the scoring response.
-- Pin dependency versions for reproducible installs.
-- Add tests for workflow routing, score parsing, and revision loop behavior.
+- Live search results change over time; reproducible experiments should use a frozen, timestamped corpus.
+- The current claim verifier is lexical and should be complemented by semantic entailment for high-stakes use.
+- Search results may contain low-authority sources; inspect the displayed URLs and evidence.
+- LLM judges can remain biased after order swapping; human evaluation is required for publication claims.
+- Token counts are estimates and do not replace provider billing data.
+- This is a research prototype, not an autonomous source for financial, medical, legal, or safety-critical advice.
 
 ## License
 
-No license file is currently included. Add a license before distributing or reusing the project in production contexts.
+No license is currently included. Add an appropriate license before distribution or reuse.
